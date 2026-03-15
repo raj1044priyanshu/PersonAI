@@ -1,0 +1,5 @@
+{
+  "name": "Persona Mimic Chat",
+  "description": "An AI chatbot that learns and mimics a specific persona based on uploaded chat history, with local storage persistence.",
+  "requestFramePermissions": []
+}
