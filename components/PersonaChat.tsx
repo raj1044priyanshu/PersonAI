@@ -6,9 +6,6 @@ import { ArrowUp, Sparkles, Paperclip, UserCircle2, Mic, X, Play, Image as Image
 import { motion, AnimatePresence } from 'motion/react';
 import { get, set, del } from 'idb-keyval';
 
-// Initialize Gemini API
-const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-
 type Attachment = {
   data: string;
   mimeType: string;
@@ -36,12 +33,13 @@ type PersonaConfig = {
   sampleChats: string;
   trainingImages: TrainingMedia[];
   trainingAudio: TrainingMedia[];
+  apiKey?: string;
 };
 
 export default function PersonaChat() {
   const [isMounted, setIsMounted] = useState(false);
   const [step, setStep] = useState<'setup' | 'chat'>('setup');
-  const [config, setConfig] = useState<PersonaConfig>({ name: '', sampleChats: '', trainingImages: [], trainingAudio: [] });
+  const [config, setConfig] = useState<PersonaConfig>({ name: '', sampleChats: '', trainingImages: [], trainingAudio: [], apiKey: '' });
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -61,7 +59,8 @@ export default function PersonaChat() {
             name: savedConfig.name || '',
             sampleChats: savedConfig.sampleChats || '',
             trainingImages: savedConfig.trainingImages || [],
-            trainingAudio: savedConfig.trainingAudio || []
+            trainingAudio: savedConfig.trainingAudio || [],
+            apiKey: savedConfig.apiKey || ''
           });
           if (savedConfig.name && (savedConfig.sampleChats || savedConfig?.trainingImages?.length > 0 || savedConfig?.trainingAudio?.length > 0)) {
             setStep('chat');
@@ -166,7 +165,7 @@ export default function PersonaChat() {
 
   const resetPersona = async () => {
     if (confirm('Are you sure you want to reset the persona and clear all chats?')) {
-      setConfig({ name: '', sampleChats: '', trainingImages: [], trainingAudio: [] });
+      setConfig({ name: '', sampleChats: '', trainingImages: [], trainingAudio: [], apiKey: '' });
       setMessages([]);
       setStep('setup');
       await del('personaConfig');
@@ -193,6 +192,13 @@ export default function PersonaChat() {
     setIsLoading(true);
 
     try {
+      const apiKey = config.apiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("API key is missing. Please provide it in the setup screen or check your Vercel Environment Variables.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
+
       const systemInstruction = `You are an advanced AI persona simulator. Your goal is to perfectly mimic the personality, typing style, emoji usage, voice tone, and behavioral quirks of the person named ${config.name}.
 
 CRITICAL INSTRUCTIONS:
@@ -257,7 +263,7 @@ CRITICAL INSTRUCTIONS:
       ];
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: apiContents,
         config: {
           systemInstruction,
@@ -275,14 +281,14 @@ CRITICAL INSTRUCTIONS:
           text: modelText,
         },
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating response:', error);
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: 'model',
-          text: '*Error: Could not connect to the persona. Please try again.*',
+          text: `*Error: ${error?.message || 'Could not connect to the persona. Please try again.'}*`,
         },
       ]);
     } finally {
@@ -311,6 +317,22 @@ CRITICAL INSTRUCTIONS:
           </div>
 
           <form onSubmit={handleSetupSubmit} className="space-y-8">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-2">
+                Gemini API Key (Required for Vercel)
+              </label>
+              <p className="text-xs text-stone-500 mb-3">
+                If deployed on Vercel, paste your Gemini API key here. It will be saved securely in your browser.
+              </p>
+              <input
+                type="password"
+                value={config.apiKey || ''}
+                onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                placeholder="AIzaSy..."
+                className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-5 py-3.5 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-900/10 transition-all"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-2">
                 Persona Name
